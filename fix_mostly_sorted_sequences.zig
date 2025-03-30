@@ -304,49 +304,6 @@ pub fn findIndex(comptime T: type, arr: []const T, value: T) ?usize {
     return null;
 }
 
-/// Fixes a mostly sorted sequence with exactly two out-of-order elements
-/// Returns the sorted sequence if successful, null if the sequence cannot be fixed
-pub fn fixMostlySorted(comptime T: type, seq: *SortedSequence(T), index1: usize, index2: usize) !?SortedSequence(T) {
-    if (seq.array.len < 2) return null;
-    if (index1 >= seq.array.len or index2 >= seq.array.len) return null;
-    if (index1 == index2) return null;
-
-    // Create a new sorted sequence
-    var new_seq = try SortedSequence(T).init(seq.allocator, seq.array.len);
-
-    // Copy all values except the out-of-order ones
-    for (0..seq.array.len) |i| {
-        if (i != index1 and i != index2) {
-            _ = new_seq.modify(i, seq.array[i], seq.array[i]);
-        }
-    }
-
-    // Add the two out-of-order elements in the correct order
-    const val1 = seq.array[index1];
-    const val2 = seq.array[index2];
-    
-    // Add smaller value first to avoid losing values
-    if (val1 < val2) {
-        _ = new_seq.modify(index1, new_seq.array[index1], val1);
-        _ = new_seq.modify(index2, new_seq.array[index2], val2);
-    } else {
-        _ = new_seq.modify(index2, new_seq.array[index2], val2);
-        _ = new_seq.modify(index1, new_seq.array[index1], val1);
-    }
-
-    return new_seq;
-}
-
-/// Returns true if n is a power of 2
-fn isPowerOfTwo(n: u64) bool {
-    return n > 0 and (n & (n - 1)) == 0;
-}
-
-/// Returns true if n is a power of 4
-fn isPowerOfFour(n: u64) bool {
-    return isPowerOfTwo(n) and (n & 0xAAAAAAAAAAAAAAAA) == 0;
-}
-
 test "simple case - two adjacent elements swapped" {
     const testing = std.testing;
 
@@ -371,7 +328,6 @@ test "elements far apart - multiple modifications" {
 
     // Modify values to create [1, 2, 5, 4, 3]
     _ = seq.modify(2, 3, 5);
-    _ = seq.modify(3, 4, 4);
     _ = seq.modify(4, 5, 3);
     
     const sorted = seq.sortedArray();
@@ -404,7 +360,6 @@ test "array with duplicate values" {
 
     // Modify values to create [3, 2, 3, 4, 5, 6, 7, 8, 3, 10]
     _ = seq.modify(0, 1, 3);
-    _ = seq.modify(1, 2, 2);
     _ = seq.modify(8, 9, 3);
     
     const sorted = seq.sortedArray();
@@ -413,3 +368,21 @@ test "array with duplicate values" {
     try testing.expectEqualSlices(u64, &[_]u64{ 2, 3, 3, 3, 4, 5, 6, 7, 8, 10 }, sorted);
 }
 
+test "simulating mid way through processing the redistribute 2 factors algorithm on input 15" {
+    const testing = std.testing;
+
+    var seq = try SortedSequence(u64).init(std.heap.page_allocator, 15);
+    defer seq.deinit();
+
+    // Simulate redistributing the 2s from 6 and 8 to smaller elements
+    _ = seq.modify(5, 6, 3);
+    _ = seq.modify(0, 1, 2);
+    _ = seq.modify(7, 8, 4);
+    _ = seq.modify(0, 2, 4);
+
+    const sorted = seq.sortedArray();
+    defer seq.allocator.free(sorted);
+    
+    // The expected result should be properly sorted
+    try testing.expectEqualSlices(u64, &[_]u64{ 2, 3, 3, 4, 4, 4, 5, 7, 9, 10, 11, 12, 13, 14, 15 }, sorted);
+}

@@ -170,4 +170,4 @@ test "duplicate values between indices" {
     var arr = [_]u64{ 4, 2, 3, 3, 4, 5, 7, 4, 9, 10, 11, 12, 13, 14, 15 };
     try testing.expect(try fixMostlySorted(u64, &arr, 0, 7));
     try testing.expectEqualSlices(u64, &[_]u64{ 2, 3, 3, 4, 4, 4, 5, 7, 9, 10, 11, 12, 13, 14, 15 }, &arr);
-} 
+}
