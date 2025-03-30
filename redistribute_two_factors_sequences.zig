@@ -42,7 +42,6 @@ pub fn redistributeTwoFactors(n: u64) ![]u64 {
     // Calculate the lower bound (3N/8)
     const lower_bound = (3 * n) / 8;
     std.debug.print("\nStarting redistribution with N={d}, lower_bound={d}\n", .{n, lower_bound});
-    std.debug.print("Initial array: {any}\n", .{arr});
 
     // Process even numbers between 3N/8 and N
     var i: usize = lower_bound;
@@ -86,7 +85,6 @@ pub fn redistributeTwoFactors(n: u64) ![]u64 {
         }
     }
 
-    std.debug.print("Final array: {any}\n", .{arr});
     return arr;
 }
 

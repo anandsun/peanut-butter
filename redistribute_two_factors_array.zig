@@ -75,7 +75,6 @@ pub fn redistributeTwoFactors(n: u64) ![]u64 {
         }
     }
 
-    std.debug.print("Final array: {any}\n", .{arr});
     return arr;
 }
 
