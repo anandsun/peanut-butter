@@ -113,7 +113,14 @@ pub fn SortedSequence(comptime T: type) type {
                     if (is_out_of_order) {
                         // First split the appropriate slice
                         const split_slice = self.slices.items[slice_to_split.?];
+                        std.debug.print("\nSplitting slice {d}: [{d}..{d}] = ", .{ slice_to_split.?, split_slice.start, split_slice.end });
+                        for (split_slice.start..split_slice.end + 1) |j| {
+                            std.debug.print("{d} ", .{self.array[j]});
+                        }
+                        std.debug.print("\nSplit value: {d}\n", .{split_value});
+                        
                         const split_idx = findCorrectPosition(T, self.array, split_value, split_slice.start, split_slice.end);
+                        std.debug.print("Split index: {d}\n", .{split_idx});
                         
                         // Remove the original slice
                         _ = self.slices.orderedRemove(slice_to_split.?);
@@ -234,10 +241,112 @@ pub fn SortedSequence(comptime T: type) type {
                             // Insert at the correct position
                             self.slices.insert(left, new_slice) catch return false;
                         }
+                        
+                        // After inserting all new slices, check if any of them are singletons and split others if needed
+                        var new_slice_idx: usize = 0;
+                        while (new_slice_idx < new_slices.items.len) {
+                            const new_slice = new_slices.items[new_slice_idx];
+                            if (new_slice.start == new_slice.end) {  // This is a singleton slice
+                                const singleton_value = self.array[new_slice.start];
+                                
+                                // Check all existing slices
+                                var existing_slice_idx: usize = 0;
+                                while (existing_slice_idx < self.slices.items.len) {
+                                    const existing_slice = self.slices.items[existing_slice_idx];
+                                    const slice_start_val = self.array[existing_slice.start];
+                                    const slice_end_val = self.array[existing_slice.end];
+                                    
+                                    // If this slice contains values both less than and greater than the singleton
+                                    if (slice_start_val < singleton_value and slice_end_val > singleton_value) {
+                                        std.debug.print("\nFound slice that needs splitting due to singleton {d}: [{d}..{d}] = ", 
+                                            .{ singleton_value, existing_slice.start, existing_slice.end });
+                                        for (existing_slice.start..existing_slice.end + 1) |k| {
+                                            std.debug.print("{d} ", .{self.array[k]});
+                                        }
+                                        std.debug.print("\n", .{});
+                                        
+                                        // Find where to split this slice
+                                        const singleton_split_idx = findCorrectPosition(T, self.array, singleton_value, existing_slice.start, existing_slice.end);
+                                        std.debug.print("Split index: {d}\n", .{singleton_split_idx});
+                                        
+                                        // Remove the slice that needs to be split
+                                        _ = self.slices.orderedRemove(existing_slice_idx);
+                                        
+                                        // Add the split parts in the correct order
+                                        if (singleton_split_idx > existing_slice.start) {
+                                            // Find correct insertion position for first part
+                                            var left: usize = 0;
+                                            var right: usize = self.slices.items.len;
+                                            while (left < right) {
+                                                const mid = left + (right - left) / 2;
+                                                const curr_slice = self.slices.items[mid];
+                                                if (self.array[existing_slice.start] < self.array[curr_slice.start]) {
+                                                    right = mid;
+                                                } else if (self.array[existing_slice.start] == self.array[curr_slice.start]) {
+                                                    // If values are equal, order by end value
+                                                    if (self.array[existing_slice.end] < self.array[curr_slice.end]) {
+                                                        right = mid;
+                                                    } else {
+                                                        left = mid + 1;
+                                                    }
+                                                } else {
+                                                    left = mid + 1;
+                                                }
+                                            }
+                                            self.slices.insert(left, .{
+                                                .start = existing_slice.start,
+                                                .end = singleton_split_idx - 1,
+                                            }) catch return false;
+                                        }
+                                        
+                                        if (singleton_split_idx <= existing_slice.end) {
+                                            // Find correct insertion position for second part
+                                            var left: usize = 0;
+                                            var right: usize = self.slices.items.len;
+                                            while (left < right) {
+                                                const mid = left + (right - left) / 2;
+                                                const curr_slice = self.slices.items[mid];
+                                                if (self.array[singleton_split_idx] < self.array[curr_slice.start]) {
+                                                    right = mid;
+                                                } else if (self.array[singleton_split_idx] == self.array[curr_slice.start]) {
+                                                    // If values are equal, order by end value
+                                                    if (self.array[existing_slice.end] < self.array[curr_slice.end]) {
+                                                        right = mid;
+                                                    } else {
+                                                        left = mid + 1;
+                                                    }
+                                                } else {
+                                                    left = mid + 1;
+                                                }
+                                            }
+                                            self.slices.insert(left, .{
+                                                .start = singleton_split_idx,
+                                                .end = existing_slice.end,
+                                            }) catch return false;
+                                        }
+                                        
+                                        // Since we modified the slice array, we need to check this position again
+                                        existing_slice_idx -= 1;
+                                    }
+                                    existing_slice_idx += 1;
+                                }
+                            }
+                            new_slice_idx += 1;
+                        }
                     }
                     break;
                 }
                 slice_idx += 1;
+            }
+            
+            // Log slice information after modification
+            std.debug.print("\nSlices after modification:\n", .{});
+            for (self.slices.items, 0..) |slice, i| {
+                std.debug.print("Slice {d}: [{d}..{d}] = ", .{ i, slice.start, slice.end });
+                for (slice.start..slice.end + 1) |j| {
+                    std.debug.print("{d} ", .{self.array[j]});
+                }
+                std.debug.print("\n", .{});
             }
             
             return true;
