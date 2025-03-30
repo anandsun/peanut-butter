@@ -1,194 +1,321 @@
 const std = @import("std");
 
-/// Represents a contiguous range of indices that are in sorted order
-const Range = struct {
+/// Represents a slice of the array that is in sorted order
+const Slice = struct {
     start: usize,
     end: usize,
-    next: ?*Range,
 };
 
-/// Represents a sorted sequence by tracking contiguous ranges of sorted indices
-fn SortedSequence(comptime T: type) type {
+/// Represents a sorted sequence by tracking slices of sorted indices
+pub fn SortedSequence(comptime T: type) type {
     return struct {
         const Self = @This();
         
-        /// Original array we're sorting
-        original_array: []T,
-        /// First range in the linked list
-        first_range: ?*Range,
-        /// Allocator for ranges
+        /// Array containing the values
+        array: []T,
+        /// Dynamic array of sorted slices
+        slices: std.ArrayList(Slice),
+        /// Allocator for slices
         allocator: std.mem.Allocator,
 
-        pub fn init(allocator: std.mem.Allocator, arr: []T) !Self {
+        pub fn init(allocator: std.mem.Allocator, n: usize) !Self {
+            // Create array of integers from 1 to N
+            var arr = try allocator.alloc(T, n);
+            for (0..n) |i| {
+                arr[i] = @intCast(i + 1);
+            }
+
+            // Create initial slice covering entire array
+            var slices = std.ArrayList(Slice).init(allocator);
+            try slices.append(.{
+                .start = 0,
+                .end = n - 1,
+            });
+
             return Self{
-                .original_array = arr,
-                .first_range = null,
+                .array = arr,
+                .slices = slices,
                 .allocator = allocator,
             };
         }
 
         pub fn deinit(self: *Self) void {
-            var current = self.first_range;
-            while (current) |range| {
-                const next = range.next;
-                self.allocator.destroy(range);
-                current = next;
-            }
+            self.slices.deinit();
+            self.allocator.free(self.array);
         }
 
-        /// Returns the value at the given sorted position
-        fn valueAt(self: *const Self, index: usize) T {
-            var current = self.first_range;
-            var current_index: usize = 0;
+        /// Returns the value at the given index in the underlying array
+        pub fn valueAt(self: *const Self, index: usize) T {
+            return self.array[index];
+        }
+
+        /// Returns the index of the minimum value in the sequence
+        pub fn minimumIndex(self: *const Self) usize {
+            return self.slices.items[0].start;
+        }
+
+        /// Modifies a value at the given index if it matches the expected value
+        pub fn modify(self: *Self, index: usize, expected_value: T, new_value: T) bool {
+            if (self.array[index] != expected_value) {
+                return false;
+            }
+            self.array[index] = new_value;
             
-            while (current) |range| {
-                const range_len = range.end - range.start + 1;
-                if (current_index + range_len > index) {
-                    const offset = index - current_index;
-                    return self.original_array[range.start + offset];
+            std.debug.print("\n=== Starting modify for index {d}: {d} -> {d} ===\n", .{index, expected_value, new_value});
+            std.debug.print("Current array state: ", .{});
+            for (0..self.array.len) |i| {
+                std.debug.print("{d} ", .{self.array[i]});
+            }
+            std.debug.print("\nCurrent slices:\n", .{});
+            for (self.slices.items, 0..) |slice, i| {
+                std.debug.print("  Slice {d}: [{d}..={d}] values: ", .{i, slice.start, slice.end});
+                for (slice.start..slice.end + 1) |j| {
+                    std.debug.print("{d} ", .{self.array[j]});
                 }
-                current_index += range_len;
-                current = range.next;
+                std.debug.print("\n", .{});
             }
             
-            unreachable;
-        }
-
-        /// Tries to merge adjacent ranges if they represent consecutive indices
-        fn tryMergeRanges(self: *Self) void {
-            var current = self.first_range;
-            while (current) |range| {
-                while (range.next) |next| {
-                    // Check if ranges can be merged (consecutive indices and values)
-                    if (range.end + 1 == next.start and 
-                        self.original_array[range.end] + 1 == self.original_array[next.start]) {
-                        // Merge ranges
-                        range.end = next.end;
-                        range.next = next.next;
-                        self.allocator.destroy(next);
-                    } else {
-                        break;
+            // Find the slice containing the modified index
+            var slice_idx: usize = 0;
+            while (slice_idx < self.slices.items.len) {
+                const slice = self.slices.items[slice_idx];
+                if (index >= slice.start and index <= slice.end) {
+                    std.debug.print("Found containing slice: [{d}..={d}]\n", .{slice.start, slice.end});
+                    
+                    // Value is within this slice
+                    var is_out_of_order = false;
+                    var slice_to_split: ?usize = null;
+                    var split_value: T = new_value;
+                    
+                    std.debug.print("Checking neighbors for value {d} at index {d}\n", .{new_value, index});
+                    
+                    // Check if value is out of order with respect to immediate neighbors
+                    // First check left neighbor
+                    if (index > slice.start) {
+                        // Check against element to the left within same slice
+                        std.debug.print("  Checking left neighbor within slice: {d} at index {d}\n", 
+                            .{self.array[index - 1], index - 1});
+                        if (self.array[index] < self.array[index - 1]) {
+                            std.debug.print("  Value {d} is less than left neighbor {d}\n", 
+                                .{self.array[index], self.array[index - 1]});
+                            is_out_of_order = true;
+                            slice_to_split = slice_idx;
+                            split_value = self.array[index - 1];
+                        }
+                    } else if (slice_idx > 0) {
+                        // Check against rightmost element of previous slice
+                        const prev_slice = self.slices.items[slice_idx - 1];
+                        std.debug.print("  Checking left neighbor from previous slice: {d} at index {d}\n", 
+                            .{self.array[prev_slice.end], prev_slice.end});
+                        if (self.array[index] < self.array[prev_slice.end]) {
+                            std.debug.print("  Value {d} is less than left neighbor {d}\n", 
+                                .{self.array[index], self.array[prev_slice.end]});
+                            is_out_of_order = true;
+                            slice_to_split = slice_idx - 1;
+                            split_value = self.array[prev_slice.end];
+                        }
                     }
-                }
-                current = range.next;
-            }
-        }
-
-        /// Adds an element to the sequence, maintaining sorted order
-        pub fn add(self: *Self, index: usize, value: T) void {
-            // Create new range for this element
-            const new_range = self.allocator.create(Range) catch return;
-            new_range.* = .{
-                .start = index,
-                .end = index,
-                .next = null,
-            };
-
-            // If list is empty, make this the first range
-            if (self.first_range == null) {
-                self.first_range = new_range;
-                return;
-            }
-
-            // Special case: if value is smaller than first range
-            if (value < self.original_array[self.first_range.?.start]) {
-                new_range.next = self.first_range;
-                self.first_range = new_range;
-                self.tryMergeRanges();
-                return;
-            }
-
-            // Find where to insert based on value
-            var prev: ?*Range = null;
-            var current = self.first_range;
-            
-            while (current) |range| {
-                const current_value = self.original_array[range.start];
-                const next_value = if (range.next) |next| self.original_array[next.start] else value + 1;
-                
-                if (value < current_value) {
-                    // Insert before current range
-                    if (prev) |p| {
-                        new_range.next = p.next;
-                        p.next = new_range;
-                    } else {
-                        new_range.next = self.first_range;
-                        self.first_range = new_range;
+                    
+                    // Then check right neighbor
+                    if (!is_out_of_order) {
+                        if (index < slice.end) {
+                            // Check against element to the right within same slice
+                            std.debug.print("  Checking right neighbor within slice: {d} at index {d}\n", 
+                                .{self.array[index + 1], index + 1});
+                            if (self.array[index] > self.array[index + 1]) {
+                                std.debug.print("  Value {d} is greater than right neighbor {d}\n", 
+                                    .{self.array[index], self.array[index + 1]});
+                                is_out_of_order = true;
+                                slice_to_split = slice_idx;
+                                split_value = self.array[index + 1];
+                            }
+                        } else if (slice_idx < self.slices.items.len - 1) {
+                            // Check against leftmost element of next slice
+                            const next_slice = self.slices.items[slice_idx + 1];
+                            std.debug.print("  Checking right neighbor from next slice: {d} at index {d}\n", 
+                                .{self.array[next_slice.start], next_slice.start});
+                            if (self.array[index] > self.array[next_slice.start]) {
+                                std.debug.print("  Value {d} is greater than right neighbor {d}\n", 
+                                    .{self.array[index], self.array[next_slice.start]});
+                                is_out_of_order = true;
+                                slice_to_split = slice_idx + 1;
+                                split_value = self.array[next_slice.start];
+                            }
+                        }
                     }
-                    self.tryMergeRanges();
-                    return;
-                } else if (value < next_value) {
-                    // Insert after current range
-                    new_range.next = range.next;
-                    range.next = new_range;
-                    self.tryMergeRanges();
-                    return;
+                    
+                    if (is_out_of_order) {
+                        std.debug.print("Value {d} at index {d} is out of order\n", .{new_value, index});
+                        
+                        // First split the appropriate slice
+                        const split_slice = self.slices.items[slice_to_split.?];
+                        const split_idx = findCorrectPosition(T, self.array, split_value, split_slice.start, split_slice.end);
+                        std.debug.print("Binary search found split point at index {d} in slice [{d}..={d}]\n", 
+                            .{split_idx, split_slice.start, split_slice.end});
+                        
+                        // Remove the original slice
+                        _ = self.slices.orderedRemove(slice_to_split.?);
+                        
+                        // Collect all new slices we need to insert
+                        var new_slices = std.ArrayList(Slice).init(self.allocator);
+                        defer new_slices.deinit();
+                        
+                        // Add the split slices from the first split
+                        if (split_idx > split_slice.start) {
+                            new_slices.append(.{
+                                .start = split_slice.start,
+                                .end = split_idx - 1,
+                            }) catch return false;
+                        }
+                        
+                        if (split_idx <= split_slice.end) {
+                            new_slices.append(.{
+                                .start = split_idx,
+                                .end = split_slice.end,
+                            }) catch return false;
+                        }
+                        
+                        // If the slice we just split contains our modified value's index,
+                        // we need to split it again at that index
+                        if (index >= split_slice.start and index <= split_slice.end) {
+                            std.debug.print("Modified value's index {d} is in the split slice, splitting it again\n", .{index});
+                            
+                            // Find which of the new slices contains our index
+                            for (new_slices.items, 0..) |new_slice, i| {
+                                if (index >= new_slice.start and index <= new_slice.end) {
+                                    // Remove this slice from new_slices
+                                    _ = new_slices.orderedRemove(i);
+                                    
+                                    // Add the split slices
+                                    if (index > new_slice.start) {
+                                        new_slices.append(.{
+                                            .start = new_slice.start,
+                                            .end = index - 1,
+                                        }) catch return false;
+                                    }
+                                    
+                                    new_slices.append(.{
+                                        .start = index,
+                                        .end = index,
+                                    }) catch return false;
+                                    
+                                    if (index + 1 <= new_slice.end) {
+                                        new_slices.append(.{
+                                            .start = index + 1,
+                                            .end = new_slice.end,
+                                        }) catch return false;
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        // Check if any of the new slices need to be split further
+                        var i: usize = 0;
+                        while (i < new_slices.items.len) {
+                            const curr_slice = new_slices.items[i];
+                            if (curr_slice.start != curr_slice.end) {  // Skip singleton slices
+                                const slice_start_val = self.array[curr_slice.start];
+                                const slice_end_val = self.array[curr_slice.end];
+                                if (slice_start_val < new_value and slice_end_val > new_value) {
+                                    // This slice needs to be split
+                                    const inner_split_idx = findCorrectPosition(T, self.array, new_value, curr_slice.start, curr_slice.end);
+                                    
+                                    // Remove the current slice
+                                    _ = new_slices.orderedRemove(i);
+                                    
+                                    // Add the split parts
+                                    if (inner_split_idx > curr_slice.start) {
+                                        new_slices.insert(i, .{
+                                            .start = curr_slice.start,
+                                            .end = inner_split_idx - 1,
+                                        }) catch return false;
+                                        i += 1;
+                                    }
+                                    
+                                    if (inner_split_idx <= curr_slice.end) {
+                                        new_slices.insert(i, .{
+                                            .start = inner_split_idx,
+                                            .end = curr_slice.end,
+                                        }) catch return false;
+                                        i += 1;
+                                    }
+                                } else {
+                                    i += 1;
+                                }
+                            } else {
+                                i += 1;
+                            }
+                        }
+                        
+                        // Insert all new slices in sorted order
+                        for (new_slices.items) |new_slice| {
+                            std.debug.print("Inserting slice: [{d}..={d}] values: ", .{new_slice.start, new_slice.end});
+                            for (new_slice.start..new_slice.end + 1) |j| {
+                                std.debug.print("{d} ", .{self.array[j]});
+                            }
+                            std.debug.print("\n", .{});
+                            
+                            // Find the correct insertion point using binary search
+                            var left: usize = 0;
+                            var right: usize = self.slices.items.len;
+                            
+                            while (left < right) {
+                                const mid = left + (right - left) / 2;
+                                const curr_slice = self.slices.items[mid];
+                                if (self.array[new_slice.start] < self.array[curr_slice.start]) {
+                                    right = mid;
+                                } else if (self.array[new_slice.start] == self.array[curr_slice.start]) {
+                                    // If values are equal, order by end value
+                                    if (self.array[new_slice.end] < self.array[curr_slice.end]) {
+                                        right = mid;
+                                    } else {
+                                        left = mid + 1;
+                                    }
+                                } else {
+                                    left = mid + 1;
+                                }
+                            }
+                            
+                            // Insert at the correct position
+                            self.slices.insert(left, new_slice) catch return false;
+                        }
+                        
+                        std.debug.print("Final slice state:\n", .{});
+                        for (self.slices.items, 0..) |s, slice_num| {
+                            std.debug.print("  Slice {d}: [{d}..={d}] values: ", .{slice_num, s.start, s.end});
+                            for (s.start..s.end + 1) |j| {
+                                std.debug.print("{d} ", .{self.array[j]});
+                            }
+                            std.debug.print("\n", .{});
+                        }
+                    }
+                    break;
                 }
-                
-                prev = range;
-                current = range.next;
+                slice_idx += 1;
             }
             
-            // If we get here, append to the end
-            if (prev) |p| {
-                p.next = new_range;
-                self.tryMergeRanges();
-            }
+            std.debug.print("=== End modify ===\n", .{});
+            return true;
         }
 
-        /// Returns the total length of the sequence
-        fn len(self: *const Self) usize {
-            var total: usize = 0;
-            var current = self.first_range;
-            while (current) |range| {
-                total += range.end - range.start + 1;
-                current = range.next;
-            }
-            return total;
-        }
-
-        /// Copies the sorted sequence back to the array
-        pub fn copyToArray(self: *const Self, arr: []T) void {
-            // First, create a mapping of indices to their values
-            var indices = self.allocator.alloc(usize, arr.len) catch return;
-            defer self.allocator.free(indices);
-            
-            var values = self.allocator.alloc(T, arr.len) catch return;
-            defer self.allocator.free(values);
-            
+        /// Returns a sorted array based on the current slices
+        pub fn sortedArray(self: *const Self) []T {
+            var result = self.allocator.alloc(T, self.array.len) catch return &[_]T{};
             var count: usize = 0;
-            
-            // Collect all indices and values
-            var current = self.first_range;
-            while (current) |range| {
-                const range_len = range.end - range.start + 1;
-                for (0..range_len) |i| {
-                    indices[count] = range.start + i;
-                    values[count] = self.original_array[range.start + i];
+
+            for (self.slices.items) |slice| {
+                const slice_len = slice.end - slice.start + 1;
+                
+                // Copy values from this slice directly to result
+                for (0..slice_len) |i| {
+                    if (count >= result.len) break;
+                    result[count] = self.array[slice.start + i];
                     count += 1;
                 }
-                current = range.next;
             }
-            
-            // Sort indices based on values using insertion sort
-            for (1..count) |i| {
-                const key_value = values[i];
-                const key_index = indices[i];
-                var j = i;
-                
-                while (j > 0 and values[j - 1] > key_value) : (j -= 1) {
-                    values[j] = values[j - 1];
-                    indices[j] = indices[j - 1];
-                }
-                
-                values[j] = key_value;
-                indices[j] = key_index;
-            }
-            
-            // Copy values in sorted order
-            for (0..count) |i| {
-                arr[i] = values[i];
-            }
+
+            return result;
         }
     };
 }
@@ -206,6 +333,7 @@ pub fn findCorrectPosition(comptime T: type, arr: []const T, value: T, start: us
         } else if (arr[mid] < value) {
             left = mid + 1;
         } else {
+            if (mid == 0) break;
             right = mid - 1;
         }
     }
@@ -232,40 +360,52 @@ pub fn findIndex(comptime T: type, arr: []const T, value: T) ?usize {
     return null;
 }
 
-/// Fixes a mostly sorted array with exactly two out-of-order elements
-/// Returns true if successful, false if the array cannot be fixed
-pub fn fixMostlySorted(comptime T: type, arr: []T, index1: usize, index2: usize) !bool {
-    if (arr.len < 2) return false;
-    if (index1 >= arr.len or index2 >= arr.len) return false;
-    if (index1 == index2) return false;
+/// Fixes a mostly sorted sequence with exactly two out-of-order elements
+/// Returns the sorted sequence if successful, null if the sequence cannot be fixed
+pub fn fixMostlySorted(comptime T: type, seq: *SortedSequence(T), index1: usize, index2: usize) !?SortedSequence(T) {
+    if (seq.array.len < 2) return null;
+    if (index1 >= seq.array.len or index2 >= seq.array.len) return null;
+    if (index1 == index2) return null;
 
-    // Create a sorted sequence to track the order
-    var seq = try SortedSequence(T).init(std.heap.page_allocator, arr);
-    defer seq.deinit();
+    std.debug.print("\n=== Starting fixMostlySorted ===\n", .{});
+    std.debug.print("Input array: ", .{});
+    for (0..seq.array.len) |i| {
+        std.debug.print("{d} ", .{seq.array[i]});
+    }
+    std.debug.print("\nIndices to fix: {d}, {d}\n", .{index1, index2});
 
-    // Add all elements except the out-of-order ones
-    for (0..arr.len) |i| {
+    // Create a new sorted sequence
+    var new_seq = try SortedSequence(T).init(seq.allocator, seq.array.len);
+
+    // Copy all values except the out-of-order ones
+    for (0..seq.array.len) |i| {
         if (i != index1 and i != index2) {
-            seq.add(i, arr[i]);
+            const success = new_seq.modify(i, seq.array[i], seq.array[i]);
+            std.debug.print("Copying index {d}: value {d} (success: {})\n", .{i, seq.array[i], success});
         }
     }
 
     // Add the two out-of-order elements in the correct order
-    const val1 = arr[index1];
-    const val2 = arr[index2];
+    const val1 = seq.array[index1];
+    const val2 = seq.array[index2];
     
-    // Add larger value first
-    if (val1 > val2) {
-        seq.add(index1, val1);
-        seq.add(index2, val2);
+    std.debug.print("Out-of-order values: {d}, {d}\n", .{val1, val2});
+    
+    // Add smaller value first to avoid losing values
+    if (val1 < val2) {
+        const success1 = new_seq.modify(index1, new_seq.array[index1], val1);
+        const success2 = new_seq.modify(index2, new_seq.array[index2], val2);
+        std.debug.print("Adding smaller first: index1={d} ({d}), index2={d} ({d})\n", .{index1, val1, index2, val2});
+        std.debug.print("Modify success: {d} -> {}, {d} -> {}\n", .{index1, success1, index2, success2});
     } else {
-        seq.add(index2, val2);
-        seq.add(index1, val1);
+        const success2 = new_seq.modify(index2, new_seq.array[index2], val2);
+        const success1 = new_seq.modify(index1, new_seq.array[index1], val1);
+        std.debug.print("Adding smaller first: index2={d} ({d}), index1={d} ({d})\n", .{index2, val2, index1, val1});
+        std.debug.print("Modify success: {d} -> {}, {d} -> {}\n", .{index2, success2, index1, success1});
     }
 
-    // Copy the sorted sequence back to the array
-    seq.copyToArray(arr);
-    return true;
+    std.debug.print("=== End fixMostlySorted ===\n", .{});
+    return new_seq;
 }
 
 /// Returns true if n is a power of 2
@@ -278,83 +418,61 @@ fn isPowerOfFour(n: u64) bool {
     return isPowerOfTwo(n) and (n & 0xAAAAAAAAAAAAAAAA) == 0;
 }
 
-/// Processes powers of 2 in the array according to the specified rules
-pub fn processPowersOfTwo(n: u64) ![]u64 {
-    // Create array of integers from 1 to N
-    var arr = try std.heap.page_allocator.alloc(u64, n);
-    for (0..n) |i| {
-        arr[i] = @intCast(i + 1);
-    }
-
-    // Calculate the starting power of 2 (3N/8)
-    const start_power = (3 * n) / 8;
-    var current_power: u64 = 1;
-    while (current_power < start_power) : (current_power *= 2) {}
-
-    // Process each power of 2 up to N
-    while (current_power <= n) : (current_power *= 2) {
-        if (isPowerOfFour(current_power) and current_power > (3 * n) / 4) {
-            if (findIndex(u64, arr, current_power)) |idx| {
-                // Store original values
-                const original_first = arr[0];
-                const original_power = arr[idx];
-                
-                // First operation: divide power of 4 by 4
-                arr[idx] = original_power / 4;
-                
-                // Second operation: multiply first element by 2
-                arr[0] = original_first * 2;
-                
-                // Fix sorting after both operations
-                _ = try fixMostlySorted(u64, arr, 0, idx);
-                
-                // Third operation: multiply first element by 2 again
-                arr[0] *= 2;
-                
-                // Fix sorting again
-                _ = try fixMostlySorted(u64, arr, 0, 1);
-            }
-        } else {
-            if (findIndex(u64, arr, current_power)) |idx| {
-                // Store original values
-                const original_first = arr[0];
-                const original_power = arr[idx];
-                
-                // First operation: divide power of 2 by 2
-                arr[idx] = original_power / 2;
-                
-                // Second operation: multiply first element by 2
-                arr[0] = original_first * 2;
-                
-                // Fix sorting after both operations
-                _ = try fixMostlySorted(u64, arr, 0, idx);
-            }
-        }
-    }
-
-    return arr;
-}
-
 test "fix mostly sorted array" {
     const testing = std.testing;
+
+     // Test case 1: Simple case
+    var seq1 = try SortedSequence(u64).init(std.heap.page_allocator, 5);
+    defer seq1.deinit();
+
+    // Modify values to create [1, 2, 4, 3, 5]
+    _ = seq1.modify(2, 3, 4);
+    _ = seq1.modify(3, 4, 3);
     
-    // Test case 1: Simple case
-    var arr1 = [_]u64{ 1, 2, 4, 3, 5 };
-    try testing.expect(try fixMostlySorted(u64, &arr1, 2, 3));
-    try testing.expectEqualSlices(u64, &[_]u64{ 1, 2, 3, 4, 5 }, &arr1);
+    const sorted1 = seq1.sortedArray();
+    defer seq1.allocator.free(sorted1);
+    
+    try testing.expectEqualSlices(u64, &[_]u64{ 1, 2, 3, 4, 5 }, sorted1);
     
     // Test case 2: Elements far apart
-    var arr2 = [_]u64{ 1, 2, 5, 4, 3 };
-    try testing.expect(try fixMostlySorted(u64, &arr2, 2, 4));
-    try testing.expectEqualSlices(u64, &[_]u64{ 1, 2, 3, 4, 5 }, &arr2);
+    var seq2 = try SortedSequence(u64).init(std.heap.page_allocator, 5);
+    defer seq2.deinit();
+
+    // Modify values to create [1, 2, 5, 4, 3]
+    _ = seq2.modify(2, 3, 5);
+    _ = seq2.modify(3, 4, 4);
+    _ = seq2.modify(4, 5, 3);
+    
+    const sorted2 = seq2.sortedArray();
+    defer seq2.allocator.free(sorted2);
+    
+    try testing.expectEqualSlices(u64, &[_]u64{ 1, 2, 3, 4, 5 }, sorted2);
     
     // Test case 3: Edge case with first and last elements
-    var arr3 = [_]u64{ 5, 2, 3, 4, 1 };
-    try testing.expect(try fixMostlySorted(u64, &arr3, 0, 4));
-    try testing.expectEqualSlices(u64, &[_]u64{ 1, 2, 3, 4, 5 }, &arr3);
+    var seq3 = try SortedSequence(u64).init(std.heap.page_allocator, 5);
+    defer seq3.deinit();
+
+    // Modify values to create [5, 2, 3, 4, 1]
+    _ = seq3.modify(0, 1, 5);
+    _ = seq3.modify(4, 5, 1);
+    
+    const sorted3 = seq3.sortedArray();
+    defer seq3.allocator.free(sorted3);
+    
+    try testing.expectEqualSlices(u64, &[_]u64{ 1, 2, 3, 4, 5 }, sorted3);
 
     // Test case 4: Array with duplicate values
-    var arr4 = [_]u64{ 3, 2, 3, 4, 5, 6, 7, 8, 3, 10 };
-    try testing.expect(try fixMostlySorted(u64, &arr4, 0, 8));
-    try testing.expectEqualSlices(u64, &[_]u64{ 2, 3, 3, 3, 4, 5, 6, 7, 8, 10 }, &arr4);
+    var seq4 = try SortedSequence(u64).init(std.heap.page_allocator, 10);
+    defer seq4.deinit();
+
+    // Modify values to create [3, 2, 3, 4, 5, 6, 7, 8, 3, 10]
+    _ = seq4.modify(0, 1, 3);
+    _ = seq4.modify(1, 2, 2);
+    _ = seq4.modify(8, 9, 3);
+    
+    const sorted4 = seq4.sortedArray();
+    defer seq4.allocator.free(sorted4);
+    
+    try testing.expectEqualSlices(u64, &[_]u64{ 2, 3, 3, 3, 4, 5, 6, 7, 8, 10 }, sorted4);
 }
+
