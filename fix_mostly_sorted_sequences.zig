@@ -470,3 +470,24 @@ test "simulating mid way through processing the redistribute 2 factors algorithm
     // The expected result should be properly sorted
     try testing.expectEqualSlices(u64, &[_]u64{ 2, 3, 3, 4, 4, 4, 5, 7, 9, 10, 11, 12, 13, 14, 15 }, sorted);
 }
+
+test "simulating mid way through processing the redistribute 2 factors algorithm on input 15, more steps" {
+    const testing = std.testing;
+
+    var seq = try SortedSequence(u64).init(std.heap.page_allocator, 15);
+    defer seq.deinit();
+
+    // Simulate redistributing the 2s from 6 and 8 to smaller elements
+    _ = seq.modify(5, 6, 3);
+    _ = seq.modify(0, 1, 2);
+    _ = seq.modify(7, 8, 4);
+    _ = seq.modify(0, 2, 4);
+    _ = seq.modify(9, 10, 5);
+    _ = seq.modify(1, 2, 4);
+
+    const sorted = seq.sortedArray();
+    defer seq.allocator.free(sorted);
+    
+    // The expected result should be properly sorted
+    try testing.expectEqualSlices(u64, &[_]u64{ 3, 3, 4, 4, 4, 4, 5, 5, 7, 9, 11, 12, 13, 14, 15 }, sorted);
+}

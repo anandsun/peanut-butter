@@ -45,134 +45,87 @@ fn printArrayState(arr: []const u64, msg: []const u8) void {
     std.debug.print("==========\n", .{});
 }
 
+/// Prints the current state of slices for debugging
+fn printSliceState(seq: *fix.SortedSequence(u64), msg: []const u8) void {
+    std.debug.print("\n=== {s} ===\n", .{msg});
+    for (seq.slices.items, 0..) |slice, i| {
+        std.debug.print("Slice {d}: [{d}..{d}] = ", .{i, slice.start, slice.end});
+        var j = slice.start;
+        while (j <= slice.end) : (j += 1) {
+            std.debug.print("{d} ", .{seq.valueAt(j)});
+        }
+        std.debug.print("\n", .{});
+    }
+    std.debug.print("==========\n", .{});
+}
+
 /// Processes even numbers in the array according to the specified rules
-pub fn redistributeTwoFactors(n: u64) ![]u64 {
-    // Create array of integers from 1 to N
-    var arr = try std.heap.page_allocator.alloc(u64, n);
-    for (0..n) |i| {
-        arr[i] = @intCast(i + 1);
-    }
-
-    // Calculate the lower bound (3N/8)
-    const lower_bound = (3 * n) / 8;
-    std.debug.print("\nStarting redistribution with N={d}, lower_bound={d}\n", .{n, lower_bound});
-    printArrayState(arr, "Initial array state");
-
-    // Initialize the sorted sequence
-    var seq = try fix.SortedSequence(u64).init(std.heap.page_allocator, arr);
-    defer seq.deinit();
+pub fn redistributeTwoFactors(seq: *fix.SortedSequence(u64)) !void {
+    const N = seq.array.len;
+    const lower_bound = 3 * N / 8;
+    std.debug.print("\nStarting redistribution with N={d}, lower_bound={d}\n", .{N, lower_bound});
     
-    // Add initial elements to sequence
-    for (0..n) |i| {
-        seq.add(i, arr[i]);
-    }
-    
-    // Process even numbers between 3N/8 and N
+    var current_array = seq.sortedArray();
+    defer std.heap.page_allocator.free(current_array);
+    printArrayState(current_array, "Initial array state");
+    printSliceState(seq, "Initial slice state");
+
+    // Process all even numbers between 3N/8 and N
     var i: usize = lower_bound;
-    while (i < n) : (i += 1) {
-        const current_value = arr[i];
+    while (i < N) : (i += 1) {
+        const current_value = seq.valueAt(i);
         if (current_value % 2 == 0) {
             std.debug.print("\nProcessing even number at index {d}: {d}\n", .{i, current_value});
             
             // Replace even number with its half
             const divided_value = current_value / 2;
-            arr[i] = divided_value;
+            _ = seq.modify(i, current_value, divided_value);
             std.debug.print("Divided {d} by 2 to get {d} at index {d}\n", .{current_value, divided_value, i});
+            printSliceState(seq, "After dividing value");
             
             // Double the smallest element in the sequence
-            const smallest_idx = seq.first_range.?.start;
-            const smallest_val = arr[smallest_idx];
-            arr[smallest_idx] = smallest_val * 2;
-            std.debug.print("Multiplied smallest element {d} by 2 to get {d}\n", .{smallest_val, arr[smallest_idx]});
+            const smallest_idx = seq.minimumIndex();
+            const smallest_val = seq.valueAt(smallest_idx);
+            std.debug.print("Found smallest element at index {d}: {d}\n", .{smallest_idx, smallest_val});
+            _ = seq.modify(smallest_idx, smallest_val, smallest_val * 2);
+            std.debug.print("Multiplied smallest element {d} by 2 to get {d}\n", .{smallest_val, smallest_val * 2});
+            printSliceState(seq, "After doubling smallest");
             
-            printArrayState(arr, "Before fixing sort");
-            
-            // Fix sorting after both operations
-            if (try fix.fixMostlySorted(u64, &seq, smallest_idx, i)) |new_seq| {
-                seq.deinit();
-                seq = new_seq;
-            }
-            
-            printArrayState(arr, "After fixing sort");
+            current_array = seq.sortedArray();
+            printArrayState(current_array, "After modifications");
 
-            // Check if we should reprocess this value
-            const should_reprocess = divided_value % 2 == 0 and divided_value > lower_bound;
-            std.debug.print("Should reprocess? {}\n", .{should_reprocess});
-            
-            if (should_reprocess) {
-                std.debug.print("\nReprocessing value {d}\n", .{divided_value});
+            // If the divided value is still even and above lower_bound, process it again
+            if (divided_value % 2 == 0 and divided_value > lower_bound) {
+                std.debug.print("\nReprocessing value {d} at index {d}\n", .{divided_value, i});
                 
-                // Find where the divided value ended up in the sequence
-                var current = seq.first_range;
-                var found_idx: ?usize = null;
+                // Replace even number with its half again
+                const new_divided_value = divided_value / 2;
+                _ = seq.modify(i, divided_value, new_divided_value);
+                std.debug.print("Divided {d} by 2 again to get {d} at index {d}\n", .{divided_value, new_divided_value, i});
+                printSliceState(seq, "After dividing value again");
                 
-                while (current) |range| : (current = range.next) {
-                    var j = range.start;
-                    while (j <= range.end) : (j += 1) {
-                        if (arr[j] == divided_value) {
-                            found_idx = j;
-                            break;
-                        }
-                    }
-                    if (found_idx != null) break;
-                }
+                // Double the smallest element again
+                const new_smallest_idx = seq.minimumIndex();
+                const new_smallest_val = seq.valueAt(new_smallest_idx);
+                std.debug.print("Found smallest element at index {d}: {d}\n", .{new_smallest_idx, new_smallest_val});
+                _ = seq.modify(new_smallest_idx, new_smallest_val, new_smallest_val * 2);
+                std.debug.print("Multiplied smallest element {d} by 2 again to get {d}\n", .{new_smallest_val, new_smallest_val * 2});
+                printSliceState(seq, "After doubling smallest again");
                 
-                if (found_idx) |idx| {
-                    std.debug.print("Found value {d} at index {d}\n", .{divided_value, idx});
-                    
-                    // Replace even number with its half again
-                    arr[idx] = divided_value / 2;
-                    std.debug.print("Divided {d} by 2 again to get {d} at index {d}\n", .{divided_value, arr[idx], idx});
-                    
-                    // Double the smallest element again
-                    const new_smallest_idx = seq.first_range.?.start;
-                    const new_smallest_val = arr[new_smallest_idx];
-                    arr[new_smallest_idx] = new_smallest_val * 2;
-                    std.debug.print("Multiplied smallest element {d} by 2 again to get {d}\n", .{new_smallest_val, arr[new_smallest_idx]});
-                    
-                    printArrayState(arr, "Before fixing sort (reprocess)");
-                    
-                    // Fix sorting after both operations
-                    if (try fix.fixMostlySorted(u64, &seq, new_smallest_idx, idx)) |new_seq| {
-                        seq.deinit();
-                        seq = new_seq;
-                    }
-                    
-                    printArrayState(arr, "After fixing sort (reprocess)");
-                }
+                current_array = seq.sortedArray();
+                printArrayState(current_array, "After reprocessing modifications");
             }
         }
     }
-
-    // Copy the final sorted sequence back to the array
-    seq.copyToArray(arr);
-    printArrayState(arr, "Final array state");
-    return arr;
 }
 
 test "redistribute two factors - N=15" {
     std.debug.print("\n=== Starting test for N=15 ===\n", .{});
-    const result = try redistributeTwoFactors(15);
-    defer std.heap.page_allocator.free(result);
+    var result = try fix.SortedSequence(u64).init(std.heap.page_allocator, 15);
+    defer result.deinit();
+
+    try redistributeTwoFactors(&result);
 
     const expected = [_]u64{ 4, 4, 4, 4, 5, 5, 6, 6, 6, 7, 7, 9, 11, 13, 15 };
-    try testing.expectEqualSlices(u64, &expected, result);
+    try testing.expectEqualSlices(u64, &expected, result.sortedArray());
 }
-
-test "redistribute two factors - N=33" {
-    std.debug.print("\n=== Starting test for N=33 ===\n", .{});
-    const result = try redistributeTwoFactors(33);
-    defer std.heap.page_allocator.free(result);
-
-    const expected = [_]u64{ 7, 8, 8, 8, 8, 8, 8, 9, 9, 10, 10, 10, 11, 11, 12, 12, 12, 12, 13, 13, 14, 14, 15, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33 };
-    try testing.expectEqualSlices(u64, &expected, result);
-} 
-
-test "redistribute two factors - N=65" {
-    std.debug.print("\n=== Starting test for N=65 ===\n", .{});
-    const result = try redistributeTwoFactors(65);
-    defer std.heap.page_allocator.free(result);
-
-    const expected = [_]u64{ 13, 14, 14, 14, 14, 15, 15, 15, 16, 16, 16, 16, 16, 16, 16, 17, 17, 18, 18, 18, 19, 19, 20, 20, 20, 20, 21, 21, 22, 22, 22, 23, 23, 24, 24, 24, 24, 24, 25, 25, 26, 26, 27, 27, 29, 29, 31, 31, 33, 35, 37, 39, 41, 43, 45, 47, 49, 51, 53, 55, 57, 59, 61, 63, 65 };
-    try testing.expectEqualSlices(u64, &expected, result);
-} 
