@@ -113,14 +113,7 @@ pub fn SortedSequence(comptime T: type) type {
                     if (is_out_of_order) {
                         // First split the appropriate slice
                         const split_slice = self.slices.items[slice_to_split.?];
-                        std.debug.print("\nSplitting slice {d}: [{d}..{d}] = ", .{ slice_to_split.?, split_slice.start, split_slice.end });
-                        for (split_slice.start..split_slice.end + 1) |j| {
-                            std.debug.print("{d} ", .{self.array[j]});
-                        }
-                        std.debug.print("\nSplit value: {d}\n", .{split_value});
-                        
                         const split_idx = findCorrectPosition(T, self.array, split_value, split_slice.start, split_slice.end);
-                        std.debug.print("Split index: {d}\n", .{split_idx});
                         
                         // Remove the original slice
                         _ = self.slices.orderedRemove(slice_to_split.?);
@@ -258,16 +251,8 @@ pub fn SortedSequence(comptime T: type) type {
                                     
                                     // If this slice contains values both less than and greater than the singleton
                                     if (slice_start_val < singleton_value and slice_end_val > singleton_value) {
-                                        std.debug.print("\nFound slice that needs splitting due to singleton {d}: [{d}..{d}] = ", 
-                                            .{ singleton_value, existing_slice.start, existing_slice.end });
-                                        for (existing_slice.start..existing_slice.end + 1) |k| {
-                                            std.debug.print("{d} ", .{self.array[k]});
-                                        }
-                                        std.debug.print("\n", .{});
-                                        
                                         // Find where to split this slice
                                         const singleton_split_idx = findCorrectPosition(T, self.array, singleton_value, existing_slice.start, existing_slice.end);
-                                        std.debug.print("Split index: {d}\n", .{singleton_split_idx});
                                         
                                         // Remove the slice that needs to be split
                                         _ = self.slices.orderedRemove(existing_slice_idx);
@@ -337,16 +322,6 @@ pub fn SortedSequence(comptime T: type) type {
                     break;
                 }
                 slice_idx += 1;
-            }
-            
-            // Log slice information after modification
-            std.debug.print("\nSlices after modification:\n", .{});
-            for (self.slices.items, 0..) |slice, i| {
-                std.debug.print("Slice {d}: [{d}..{d}] = ", .{ i, slice.start, slice.end });
-                for (slice.start..slice.end + 1) |j| {
-                    std.debug.print("{d} ", .{self.array[j]});
-                }
-                std.debug.print("\n", .{});
             }
             
             return true;
