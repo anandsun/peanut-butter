@@ -132,31 +132,42 @@ pub fn fixMostlySorted(comptime T: type, arr: []T, i: usize, j: usize) !bool {
     return true;
 }
 
-test "fix mostly sorted array" {
+test "simple case - adjacent elements swapped" {
     const testing = std.testing;
     
-    // Test case 1: Simple case
-    var arr1 = [_]u64{ 1, 2, 4, 3, 5 };
-    try testing.expect(try fixMostlySorted(u64, &arr1, 2, 3));
-    try testing.expectEqualSlices(u64, &[_]u64{ 1, 2, 3, 4, 5 }, &arr1);
-    
-    // Test case 2: Elements far apart
-    var arr2 = [_]u64{ 1, 2, 5, 4, 3 };
-    try testing.expect(try fixMostlySorted(u64, &arr2, 2, 4));
-    try testing.expectEqualSlices(u64, &[_]u64{ 1, 2, 3, 4, 5 }, &arr2);
-    
-    // Test case 3: Edge case with first and last elements
-    var arr3 = [_]u64{ 5, 2, 3, 4, 1 };
-    try testing.expect(try fixMostlySorted(u64, &arr3, 0, 4));
-    try testing.expectEqualSlices(u64, &[_]u64{ 1, 2, 3, 4, 5 }, &arr3);
+    var arr = [_]u64{ 1, 2, 4, 3, 5 };
+    try testing.expect(try fixMostlySorted(u64, &arr, 2, 3));
+    try testing.expectEqualSlices(u64, &[_]u64{ 1, 2, 3, 4, 5 }, &arr);
+}
 
-    // Test case 4: Array with duplicate values
-    var arr4 = [_]u64{ 3, 2, 3, 4, 5, 6, 7, 8, 3, 10 };
-    try testing.expect(try fixMostlySorted(u64, &arr4, 0, 8));
-    try testing.expectEqualSlices(u64, &[_]u64{ 2, 3, 3, 3, 4, 5, 6, 7, 8, 10 }, &arr4);
+test "elements far apart - three elements shifted" {
+    const testing = std.testing;
+    
+    var arr = [_]u64{ 1, 2, 5, 4, 3 };
+    try testing.expect(try fixMostlySorted(u64, &arr, 2, 4));
+    try testing.expectEqualSlices(u64, &[_]u64{ 1, 2, 3, 4, 5 }, &arr);
+}
 
-    // Test case 5: Case with duplicate values between indices
-    var arr5 = [_]u64{ 4, 2, 3, 3, 4, 5, 7, 4, 9, 10, 11, 12, 13, 14, 15 };
-    try testing.expect(try fixMostlySorted(u64, &arr5, 0, 7));
-    try testing.expectEqualSlices(u64, &[_]u64{ 2, 3, 3, 4, 4, 4, 5, 7, 9, 10, 11, 12, 13, 14, 15 }, &arr5);
+test "edge case - first and last elements swapped" {
+    const testing = std.testing;
+    
+    var arr = [_]u64{ 5, 2, 3, 4, 1 };
+    try testing.expect(try fixMostlySorted(u64, &arr, 0, 4));
+    try testing.expectEqualSlices(u64, &[_]u64{ 1, 2, 3, 4, 5 }, &arr);
+}
+
+test "array with duplicate values at edges" {
+    const testing = std.testing;
+    
+    var arr = [_]u64{ 3, 2, 3, 4, 5, 6, 7, 8, 3, 10 };
+    try testing.expect(try fixMostlySorted(u64, &arr, 0, 8));
+    try testing.expectEqualSlices(u64, &[_]u64{ 2, 3, 3, 3, 4, 5, 6, 7, 8, 10 }, &arr);
+}
+
+test "duplicate values between indices" {
+    const testing = std.testing;
+    
+    var arr = [_]u64{ 4, 2, 3, 3, 4, 5, 7, 4, 9, 10, 11, 12, 13, 14, 15 };
+    try testing.expect(try fixMostlySorted(u64, &arr, 0, 7));
+    try testing.expectEqualSlices(u64, &[_]u64{ 2, 3, 3, 4, 4, 4, 5, 7, 9, 10, 11, 12, 13, 14, 15 }, &arr);
 } 

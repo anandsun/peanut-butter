@@ -61,43 +61,21 @@ pub fn SortedSequence(comptime T: type) type {
             }
             self.array[index] = new_value;
             
-            std.debug.print("\n=== Starting modify for index {d}: {d} -> {d} ===\n", .{index, expected_value, new_value});
-            std.debug.print("Current array state: ", .{});
-            for (0..self.array.len) |i| {
-                std.debug.print("{d} ", .{self.array[i]});
-            }
-            std.debug.print("\nCurrent slices:\n", .{});
-            for (self.slices.items, 0..) |slice, i| {
-                std.debug.print("  Slice {d}: [{d}..={d}] values: ", .{i, slice.start, slice.end});
-                for (slice.start..slice.end + 1) |j| {
-                    std.debug.print("{d} ", .{self.array[j]});
-                }
-                std.debug.print("\n", .{});
-            }
-            
             // Find the slice containing the modified index
             var slice_idx: usize = 0;
             while (slice_idx < self.slices.items.len) {
                 const slice = self.slices.items[slice_idx];
                 if (index >= slice.start and index <= slice.end) {
-                    std.debug.print("Found containing slice: [{d}..={d}]\n", .{slice.start, slice.end});
-                    
                     // Value is within this slice
                     var is_out_of_order = false;
                     var slice_to_split: ?usize = null;
                     var split_value: T = new_value;
                     
-                    std.debug.print("Checking neighbors for value {d} at index {d}\n", .{new_value, index});
-                    
                     // Check if value is out of order with respect to immediate neighbors
                     // First check left neighbor
                     if (index > slice.start) {
                         // Check against element to the left within same slice
-                        std.debug.print("  Checking left neighbor within slice: {d} at index {d}\n", 
-                            .{self.array[index - 1], index - 1});
                         if (self.array[index] < self.array[index - 1]) {
-                            std.debug.print("  Value {d} is less than left neighbor {d}\n", 
-                                .{self.array[index], self.array[index - 1]});
                             is_out_of_order = true;
                             slice_to_split = slice_idx;
                             split_value = self.array[index - 1];
@@ -105,11 +83,7 @@ pub fn SortedSequence(comptime T: type) type {
                     } else if (slice_idx > 0) {
                         // Check against rightmost element of previous slice
                         const prev_slice = self.slices.items[slice_idx - 1];
-                        std.debug.print("  Checking left neighbor from previous slice: {d} at index {d}\n", 
-                            .{self.array[prev_slice.end], prev_slice.end});
                         if (self.array[index] < self.array[prev_slice.end]) {
-                            std.debug.print("  Value {d} is less than left neighbor {d}\n", 
-                                .{self.array[index], self.array[prev_slice.end]});
                             is_out_of_order = true;
                             slice_to_split = slice_idx - 1;
                             split_value = self.array[prev_slice.end];
@@ -120,11 +94,7 @@ pub fn SortedSequence(comptime T: type) type {
                     if (!is_out_of_order) {
                         if (index < slice.end) {
                             // Check against element to the right within same slice
-                            std.debug.print("  Checking right neighbor within slice: {d} at index {d}\n", 
-                                .{self.array[index + 1], index + 1});
                             if (self.array[index] > self.array[index + 1]) {
-                                std.debug.print("  Value {d} is greater than right neighbor {d}\n", 
-                                    .{self.array[index], self.array[index + 1]});
                                 is_out_of_order = true;
                                 slice_to_split = slice_idx;
                                 split_value = self.array[index + 1];
@@ -132,11 +102,7 @@ pub fn SortedSequence(comptime T: type) type {
                         } else if (slice_idx < self.slices.items.len - 1) {
                             // Check against leftmost element of next slice
                             const next_slice = self.slices.items[slice_idx + 1];
-                            std.debug.print("  Checking right neighbor from next slice: {d} at index {d}\n", 
-                                .{self.array[next_slice.start], next_slice.start});
                             if (self.array[index] > self.array[next_slice.start]) {
-                                std.debug.print("  Value {d} is greater than right neighbor {d}\n", 
-                                    .{self.array[index], self.array[next_slice.start]});
                                 is_out_of_order = true;
                                 slice_to_split = slice_idx + 1;
                                 split_value = self.array[next_slice.start];
@@ -145,13 +111,9 @@ pub fn SortedSequence(comptime T: type) type {
                     }
                     
                     if (is_out_of_order) {
-                        std.debug.print("Value {d} at index {d} is out of order\n", .{new_value, index});
-                        
                         // First split the appropriate slice
                         const split_slice = self.slices.items[slice_to_split.?];
                         const split_idx = findCorrectPosition(T, self.array, split_value, split_slice.start, split_slice.end);
-                        std.debug.print("Binary search found split point at index {d} in slice [{d}..={d}]\n", 
-                            .{split_idx, split_slice.start, split_slice.end});
                         
                         // Remove the original slice
                         _ = self.slices.orderedRemove(slice_to_split.?);
@@ -178,8 +140,6 @@ pub fn SortedSequence(comptime T: type) type {
                         // If the slice we just split contains our modified value's index,
                         // we need to split it again at that index
                         if (index >= split_slice.start and index <= split_slice.end) {
-                            std.debug.print("Modified value's index {d} is in the split slice, splitting it again\n", .{index});
-                            
                             // Find which of the new slices contains our index
                             for (new_slices.items, 0..) |new_slice, i| {
                                 if (index >= new_slice.start and index <= new_slice.end) {
@@ -250,12 +210,6 @@ pub fn SortedSequence(comptime T: type) type {
                         
                         // Insert all new slices in sorted order
                         for (new_slices.items) |new_slice| {
-                            std.debug.print("Inserting slice: [{d}..={d}] values: ", .{new_slice.start, new_slice.end});
-                            for (new_slice.start..new_slice.end + 1) |j| {
-                                std.debug.print("{d} ", .{self.array[j]});
-                            }
-                            std.debug.print("\n", .{});
-                            
                             // Find the correct insertion point using binary search
                             var left: usize = 0;
                             var right: usize = self.slices.items.len;
@@ -280,22 +234,12 @@ pub fn SortedSequence(comptime T: type) type {
                             // Insert at the correct position
                             self.slices.insert(left, new_slice) catch return false;
                         }
-                        
-                        std.debug.print("Final slice state:\n", .{});
-                        for (self.slices.items, 0..) |s, slice_num| {
-                            std.debug.print("  Slice {d}: [{d}..={d}] values: ", .{slice_num, s.start, s.end});
-                            for (s.start..s.end + 1) |j| {
-                                std.debug.print("{d} ", .{self.array[j]});
-                            }
-                            std.debug.print("\n", .{});
-                        }
                     }
                     break;
                 }
                 slice_idx += 1;
             }
             
-            std.debug.print("=== End modify ===\n", .{});
             return true;
         }
 
@@ -367,21 +311,13 @@ pub fn fixMostlySorted(comptime T: type, seq: *SortedSequence(T), index1: usize,
     if (index1 >= seq.array.len or index2 >= seq.array.len) return null;
     if (index1 == index2) return null;
 
-    std.debug.print("\n=== Starting fixMostlySorted ===\n", .{});
-    std.debug.print("Input array: ", .{});
-    for (0..seq.array.len) |i| {
-        std.debug.print("{d} ", .{seq.array[i]});
-    }
-    std.debug.print("\nIndices to fix: {d}, {d}\n", .{index1, index2});
-
     // Create a new sorted sequence
     var new_seq = try SortedSequence(T).init(seq.allocator, seq.array.len);
 
     // Copy all values except the out-of-order ones
     for (0..seq.array.len) |i| {
         if (i != index1 and i != index2) {
-            const success = new_seq.modify(i, seq.array[i], seq.array[i]);
-            std.debug.print("Copying index {d}: value {d} (success: {})\n", .{i, seq.array[i], success});
+            _ = new_seq.modify(i, seq.array[i], seq.array[i]);
         }
     }
 
@@ -389,22 +325,15 @@ pub fn fixMostlySorted(comptime T: type, seq: *SortedSequence(T), index1: usize,
     const val1 = seq.array[index1];
     const val2 = seq.array[index2];
     
-    std.debug.print("Out-of-order values: {d}, {d}\n", .{val1, val2});
-    
     // Add smaller value first to avoid losing values
     if (val1 < val2) {
-        const success1 = new_seq.modify(index1, new_seq.array[index1], val1);
-        const success2 = new_seq.modify(index2, new_seq.array[index2], val2);
-        std.debug.print("Adding smaller first: index1={d} ({d}), index2={d} ({d})\n", .{index1, val1, index2, val2});
-        std.debug.print("Modify success: {d} -> {}, {d} -> {}\n", .{index1, success1, index2, success2});
+        _ = new_seq.modify(index1, new_seq.array[index1], val1);
+        _ = new_seq.modify(index2, new_seq.array[index2], val2);
     } else {
-        const success2 = new_seq.modify(index2, new_seq.array[index2], val2);
-        const success1 = new_seq.modify(index1, new_seq.array[index1], val1);
-        std.debug.print("Adding smaller first: index2={d} ({d}), index1={d} ({d})\n", .{index2, val2, index1, val1});
-        std.debug.print("Modify success: {d} -> {}, {d} -> {}\n", .{index2, success2, index1, success1});
+        _ = new_seq.modify(index2, new_seq.array[index2], val2);
+        _ = new_seq.modify(index1, new_seq.array[index1], val1);
     }
 
-    std.debug.print("=== End fixMostlySorted ===\n", .{});
     return new_seq;
 }
 
@@ -418,61 +347,69 @@ fn isPowerOfFour(n: u64) bool {
     return isPowerOfTwo(n) and (n & 0xAAAAAAAAAAAAAAAA) == 0;
 }
 
-test "fix mostly sorted array" {
+test "simple case - two adjacent elements swapped" {
     const testing = std.testing;
 
-     // Test case 1: Simple case
-    var seq1 = try SortedSequence(u64).init(std.heap.page_allocator, 5);
-    defer seq1.deinit();
+    var seq = try SortedSequence(u64).init(std.heap.page_allocator, 5);
+    defer seq.deinit();
 
     // Modify values to create [1, 2, 4, 3, 5]
-    _ = seq1.modify(2, 3, 4);
-    _ = seq1.modify(3, 4, 3);
+    _ = seq.modify(2, 3, 4);
+    _ = seq.modify(3, 4, 3);
     
-    const sorted1 = seq1.sortedArray();
-    defer seq1.allocator.free(sorted1);
+    const sorted = seq.sortedArray();
+    defer seq.allocator.free(sorted);
     
-    try testing.expectEqualSlices(u64, &[_]u64{ 1, 2, 3, 4, 5 }, sorted1);
-    
-    // Test case 2: Elements far apart
-    var seq2 = try SortedSequence(u64).init(std.heap.page_allocator, 5);
-    defer seq2.deinit();
+    try testing.expectEqualSlices(u64, &[_]u64{ 1, 2, 3, 4, 5 }, sorted);
+}
+
+test "elements far apart - multiple modifications" {
+    const testing = std.testing;
+
+    var seq = try SortedSequence(u64).init(std.heap.page_allocator, 5);
+    defer seq.deinit();
 
     // Modify values to create [1, 2, 5, 4, 3]
-    _ = seq2.modify(2, 3, 5);
-    _ = seq2.modify(3, 4, 4);
-    _ = seq2.modify(4, 5, 3);
+    _ = seq.modify(2, 3, 5);
+    _ = seq.modify(3, 4, 4);
+    _ = seq.modify(4, 5, 3);
     
-    const sorted2 = seq2.sortedArray();
-    defer seq2.allocator.free(sorted2);
+    const sorted = seq.sortedArray();
+    defer seq.allocator.free(sorted);
     
-    try testing.expectEqualSlices(u64, &[_]u64{ 1, 2, 3, 4, 5 }, sorted2);
-    
-    // Test case 3: Edge case with first and last elements
-    var seq3 = try SortedSequence(u64).init(std.heap.page_allocator, 5);
-    defer seq3.deinit();
+    try testing.expectEqualSlices(u64, &[_]u64{ 1, 2, 3, 4, 5 }, sorted);
+}
+
+test "edge case - first and last elements swapped" {
+    const testing = std.testing;
+
+    var seq = try SortedSequence(u64).init(std.heap.page_allocator, 5);
+    defer seq.deinit();
 
     // Modify values to create [5, 2, 3, 4, 1]
-    _ = seq3.modify(0, 1, 5);
-    _ = seq3.modify(4, 5, 1);
+    _ = seq.modify(0, 1, 5);
+    _ = seq.modify(4, 5, 1);
     
-    const sorted3 = seq3.sortedArray();
-    defer seq3.allocator.free(sorted3);
+    const sorted = seq.sortedArray();
+    defer seq.allocator.free(sorted);
     
-    try testing.expectEqualSlices(u64, &[_]u64{ 1, 2, 3, 4, 5 }, sorted3);
+    try testing.expectEqualSlices(u64, &[_]u64{ 1, 2, 3, 4, 5 }, sorted);
+}
 
-    // Test case 4: Array with duplicate values
-    var seq4 = try SortedSequence(u64).init(std.heap.page_allocator, 10);
-    defer seq4.deinit();
+test "array with duplicate values" {
+    const testing = std.testing;
+
+    var seq = try SortedSequence(u64).init(std.heap.page_allocator, 10);
+    defer seq.deinit();
 
     // Modify values to create [3, 2, 3, 4, 5, 6, 7, 8, 3, 10]
-    _ = seq4.modify(0, 1, 3);
-    _ = seq4.modify(1, 2, 2);
-    _ = seq4.modify(8, 9, 3);
+    _ = seq.modify(0, 1, 3);
+    _ = seq.modify(1, 2, 2);
+    _ = seq.modify(8, 9, 3);
     
-    const sorted4 = seq4.sortedArray();
-    defer seq4.allocator.free(sorted4);
+    const sorted = seq.sortedArray();
+    defer seq.allocator.free(sorted);
     
-    try testing.expectEqualSlices(u64, &[_]u64{ 2, 3, 3, 3, 4, 5, 6, 7, 8, 10 }, sorted4);
+    try testing.expectEqualSlices(u64, &[_]u64{ 2, 3, 3, 3, 4, 5, 6, 7, 8, 10 }, sorted);
 }
 
