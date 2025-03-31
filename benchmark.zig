@@ -3,213 +3,137 @@ const seq = @import("redistribute_two_factors_sequences.zig");
 const arr = @import("redistribute_two_factors_array.zig");
 const hash = @import("redistribute_two_factors_hashmap.zig");
 
-pub fn main() void {
-    const sizes = [_]u64{ 50, 100, 500, 1000, 10000, 25000, 50000, 75000, 100000 };
-    const num_runs = 5;
-    const timeout_ns = 2 * std.time.ns_per_s; // 2 seconds in nanoseconds
-    const skip_threshold_ns = 1 * std.time.ns_per_s; // 1 second threshold for skipping larger sizes
-    
-    // Benchmark sequence-based implementation
-    std.debug.print("\nBenchmarking sequence-based implementation:\n", .{});
-    std.debug.print("=====================================\n", .{});
+const Result = struct {
+    name: []const u8,
+    times: std.ArrayList([]i64),
+};
+
+fn benchmarkImplementation(
+    comptime name: []const u8,
+    comptime implementation: *const fn(u64) anyerror![]u64,
+    sizes: []const u64,
+    num_runs: u64,
+    timeout_ns: u64,
+    skip_threshold_ns: u64,
+) !Result {
+    var result = Result{
+        .name = name,
+        .times = std.ArrayList([]i64).init(std.heap.page_allocator),
+    };
+    errdefer result.times.deinit();
+
     var should_continue = true;
     
     for (sizes) |n| {
         if (!should_continue) break;
         
-        std.debug.print("\nN={d}, {d} runs\n", .{n, num_runs});
-        var seq_times: [5]i64 = undefined;
+        var times = try std.heap.page_allocator.alloc(i64, num_runs);
+        errdefer std.heap.page_allocator.free(times);
         var max_time_ns: u64 = 0;
         var timeout_count: usize = 0;
         
         for (0..num_runs) |i| {
-            if (timeout_count >= 2) {
-                std.debug.print("Stopping after {d} timeouts\n", .{timeout_count});
-                break;
-            }
+            if (timeout_count >= 1) break;
             
             var timer = std.time.Timer.start() catch continue;
-            if (seq.redistributeTwoFactors(n)) |result| {
+            if (implementation(n)) |impl_result| {
                 const elapsed_ns = timer.lap();
                 if (elapsed_ns > timeout_ns) {
-                    std.debug.print("Run {d}: TIMEOUT (>2s)\n", .{i + 1});
-                    seq_times[i] = -1;
+                    times[i] = -1;
                     timeout_count += 1;
                     should_continue = false;
                 } else {
                     const elapsed_ms = @divTrunc(elapsed_ns, std.time.ns_per_ms);
-                    seq_times[i] = @intCast(elapsed_ms);
-                    std.debug.print("Run {d}: {d}ms\n", .{i + 1, elapsed_ms});
+                    times[i] = @intCast(elapsed_ms);
                     if (elapsed_ns > max_time_ns) {
                         max_time_ns = elapsed_ns;
                     }
                 }
-                std.heap.page_allocator.free(result);
-            } else |err| {
-                std.debug.print("Error in run {d}: {any}\n", .{i + 1, err});
-                seq_times[i] = -1;
+                std.heap.page_allocator.free(impl_result);
+            } else |_| {
+                times[i] = -1;
                 should_continue = false;
             }
         }
         
-        // Calculate and print statistics
-        var sum: i64 = 0;
-        var count: usize = 0;
+        try result.times.append(times);
         
-        for (seq_times) |time| {
-            if (time >= 0) {
-                sum += time;
-                count += 1;
-            }
-        }
-        
-        if (count > 0) {
-            const avg = @as(f64, @floatFromInt(sum)) / @as(f64, @floatFromInt(count));
-            std.debug.print("\nAverage: {d:.2}ms\n", .{avg});
-        }
-        
-        // Check if we should continue to larger sizes
         if (max_time_ns > skip_threshold_ns) {
-            std.debug.print("\nSkipping larger sizes (current size took >{d}ms)\n", .{@divTrunc(skip_threshold_ns, std.time.ns_per_ms)});
             should_continue = false;
         }
-        
-        std.debug.print("-------------------------------------\n", .{});
     }
     
-    // Benchmark array-based implementation
-    std.debug.print("\nBenchmarking array-based implementation:\n", .{});
-    std.debug.print("=====================================\n", .{});
-    should_continue = true;
-    
-    for (sizes) |n| {
-        if (!should_continue) break;
-        
-        std.debug.print("\nN={d}, {d} runs\n", .{n, num_runs});
-        var arr_times: [5]i64 = undefined;
-        var max_time_ns: u64 = 0;
-        var timeout_count: usize = 0;
-        
-        for (0..num_runs) |i| {
-            if (timeout_count >= 2) {
-                std.debug.print("Stopping after {d} timeouts\n", .{timeout_count});
-                break;
-            }
-            
-            var timer = std.time.Timer.start() catch continue;
-            if (arr.redistributeTwoFactors(n)) |result| {
-                const elapsed_ns = timer.lap();
-                if (elapsed_ns > timeout_ns) {
-                    std.debug.print("Run {d}: TIMEOUT (>2s)\n", .{i + 1});
-                    arr_times[i] = -1;
-                    timeout_count += 1;
-                    should_continue = false;
-                } else {
-                    const elapsed_ms = @divTrunc(elapsed_ns, std.time.ns_per_ms);
-                    arr_times[i] = @intCast(elapsed_ms);
-                    std.debug.print("Run {d}: {d}ms\n", .{i + 1, elapsed_ms});
-                    if (elapsed_ns > max_time_ns) {
-                        max_time_ns = elapsed_ns;
-                    }
-                }
-                std.heap.page_allocator.free(result);
-            } else |err| {
-                std.debug.print("Error in run {d}: {any}\n", .{i + 1, err});
-                arr_times[i] = -1;
-                should_continue = false;
-            }
-        }
-        
-        // Calculate and print statistics
-        var sum: i64 = 0;
-        var count: usize = 0;
-        
-        for (arr_times) |time| {
-            if (time >= 0) {
-                sum += time;
-                count += 1;
-            }
-        }
-        
-        if (count > 0) {
-            const avg = @as(f64, @floatFromInt(sum)) / @as(f64, @floatFromInt(count));
-            std.debug.print("\nAverage: {d:.2}ms\n", .{avg});
-        }
-        
-        // Check if we should continue to larger sizes
-        if (max_time_ns > skip_threshold_ns) {
-            std.debug.print("\nSkipping larger sizes (current size took >{d}ms)\n", .{@divTrunc(skip_threshold_ns, std.time.ns_per_ms)});
-            should_continue = false;
-        }
-        
-        std.debug.print("-------------------------------------\n", .{});
-    }
+    return result;
+}
 
-    // Benchmark hashmap-based implementation
-    std.debug.print("\nBenchmarking hashmap-based implementation:\n", .{});
-    std.debug.print("=====================================\n", .{});
-    should_continue = true;
+fn calculateMean(times: []i64) ?f64 {
+    var sum: i64 = 0;
+    var count: usize = 0;
     
-    for (sizes) |n| {
-        if (!should_continue) break;
-        
-        std.debug.print("\nN={d}, {d} runs\n", .{n, num_runs});
-        var hash_times: [5]i64 = undefined;
-        var max_time_ns: u64 = 0;
-        var timeout_count: usize = 0;
-        
-        for (0..num_runs) |i| {
-            if (timeout_count >= 2) {
-                std.debug.print("Stopping after {d} timeouts\n", .{timeout_count});
-                break;
-            }
-            
-            var timer = std.time.Timer.start() catch continue;
-            if (hash.redistributeTwoFactors(n)) |result| {
-                const elapsed_ns = timer.lap();
-                if (elapsed_ns > timeout_ns) {
-                    std.debug.print("Run {d}: TIMEOUT (>2s)\n", .{i + 1});
-                    hash_times[i] = -1;
-                    timeout_count += 1;
-                    should_continue = false;
-                } else {
-                    const elapsed_ms = @divTrunc(elapsed_ns, std.time.ns_per_ms);
-                    hash_times[i] = @intCast(elapsed_ms);
-                    std.debug.print("Run {d}: {d}ms\n", .{i + 1, elapsed_ms});
-                    if (elapsed_ns > max_time_ns) {
-                        max_time_ns = elapsed_ns;
-                    }
-                }
-                std.heap.page_allocator.free(result);
-            } else |err| {
-                std.debug.print("Error in run {d}: {any}\n", .{i + 1, err});
-                hash_times[i] = -1;
-                should_continue = false;
-            }
+    for (times) |time| {
+        if (time >= 0) {
+            sum += time;
+            count += 1;
         }
-        
-        // Calculate and print statistics
-        var sum: i64 = 0;
-        var count: usize = 0;
-        
-        for (hash_times) |time| {
-            if (time >= 0) {
-                sum += time;
-                count += 1;
-            }
-        }
-        
-        if (count > 0) {
-            const avg = @as(f64, @floatFromInt(sum)) / @as(f64, @floatFromInt(count));
-            std.debug.print("\nAverage: {d:.2}ms\n", .{avg});
-        }
-        
-        // Check if we should continue to larger sizes
-        if (max_time_ns > skip_threshold_ns) {
-            std.debug.print("\nSkipping larger sizes (current size took >{d}ms)\n", .{@divTrunc(skip_threshold_ns, std.time.ns_per_ms)});
-            should_continue = false;
-        }
-        
-        std.debug.print("-------------------------------------\n", .{});
     }
+    
+    if (count > 0) {
+        return @as(f64, @floatFromInt(sum)) / @as(f64, @floatFromInt(count));
+    }
+    return null;
+}
+
+pub fn main() !void {
+    const sizes = [_]u64{ 50, 100, 500, 1000, 2500, 5000, 7500, 10000 };
+    const num_runs = 5;
+    const timeout_ns = 2 * std.time.ns_per_s; // 2 seconds in nanoseconds
+    const skip_threshold_ns = 1 * std.time.ns_per_s; // 1 second threshold for skipping larger sizes
+    
+    var results = std.ArrayList(Result).init(std.heap.page_allocator);
+    defer {
+        for (results.items) |result| {
+            for (result.times.items) |times| {
+                std.heap.page_allocator.free(times);
+            }
+            result.times.deinit();
+        }
+        results.deinit();
+    }
+    
+    try results.append(try benchmarkImplementation("sequence", seq.redistributeTwoFactors, &sizes, num_runs, timeout_ns, skip_threshold_ns));
+    try results.append(try benchmarkImplementation("array", arr.redistributeTwoFactors, &sizes, num_runs, timeout_ns, skip_threshold_ns));
+    try results.append(try benchmarkImplementation("hashmap", hash.redistributeTwoFactors, &sizes, num_runs, timeout_ns, skip_threshold_ns));
+    
+    // Create output file
+    const file = try std.fs.cwd().createFile("benchmark_results.tsv", .{});
+    defer file.close();
+    
+    // Create a buffered writer
+    var buf_writer = std.io.bufferedWriter(file.writer());
+    const writer = buf_writer.writer();
+    
+    // Write header
+    try writer.print("Algorithm", .{});
+    for (sizes) |n| {
+        try writer.print("\tN={d}", .{n});
+    }
+    try writer.print("\n", .{});
+    
+    // Write data rows
+    for (results.items) |result| {
+        try writer.print("{s}", .{result.name});
+        for (result.times.items) |times| {
+            if (calculateMean(times)) |mean| {
+                try writer.print("\t{d:.2}", .{mean});
+            } else {
+                try writer.print("\tTIMEOUT", .{});
+            }
+        }
+        try writer.print("\n", .{});
+    }
+    
+    // Flush the buffer to ensure all data is written
+    try buf_writer.flush();
+    
+    std.debug.print("Benchmark results written to benchmark_results.tsv\n", .{});
 }
