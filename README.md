@@ -10,15 +10,15 @@ This repository focuses on the equitable factorization of factorials, inspired b
 
 ## Current Implementations
 
-We have multiple implementations of the "simple construction by Guy and Selfridge" mentioned in Tao's blog post. These implementations explore different data structures and their performance.
+We have multiple implementations of the "simple construction by Guy and Selfridge" mentioned in Tao's blog post. These implementations explore different data structures and their performance. We can benchmark the performance using the `benchmark.zig` file. This may help us choose the optimal data structure pattern that scales to larger input sizes before tackling the more complex algorithms.
 
 ## Future Work
 
-Currently, we have not yet implemented the more complicated constructions that Tao has requested. However, we are actively experimenting with various data structures and benchmarking their performance using the `benchmark.zig` file. This will help us choose the optimal data structure pattern before tackling the more complex algorithms.
+We have not yet implemented the more complicated constructions that Tao has requested involving starting from a large odd composite number B that approximates N!. That is a more challenging task but we hope it may include similar operations or data structures to the simpler redistribution algorithm.
 
 ## Getting Started
 
-To get started with the project, clone the repository and explore the existing implementations. Feel free to contribute by experimenting with new data structures or optimizing the current algorithms.
+To get started with the project, clone the repository and explore the existing implementations. Feel free to contribute by experimenting with new data structures or optimizing the current algorithms. The code is writtne in [Zig](https://ziglang.org/) since it enables writing low-level performant code which might be important for the large data sizes we will process but has some nice features that C lacks.
 
 ## Contributing
 
