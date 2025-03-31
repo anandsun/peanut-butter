@@ -19,10 +19,9 @@ We have not yet implemented the more complicated constructions that Tao has requ
 ## Getting Started
 
 To get started with the project, clone the repository and explore the existing implementations. Feel free to contribute by experimenting with new data structures or optimizing the current algorithms. The code is writtne in [Zig](https://ziglang.org/) since it enables writing low-level performant code which might be important for the large data sizes we will process but has some nice features that C lacks.
-
 ## Contributing
 
-We welcome contributions! If you have ideas for improving the algorithms or implementing the more complex constructions, please open a pull request.
+We welcome contributions! If you have ideas for improving the algorithms or implementing the more complex constructions, please open a pull request. If you are interested but don't know where to start, our [issues](https://github.com/anandsun/peanut-butter/issues) track some ideas that could be good starting points. 
 
 ## License
 
