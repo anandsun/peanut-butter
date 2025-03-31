@@ -1,7 +1,7 @@
 const std = @import("std");
 
 /// Represents a slice of the array that is in sorted order
-const SliceBounds = struct {
+const Slice = struct {
     start: usize,
     end: usize,
 };
@@ -14,7 +14,7 @@ pub fn SortedSequence(comptime T: type) type {
         /// Array containing the values
         array: []T,
         /// Dynamic array of sorted slices
-        slices: std.ArrayList(SliceBounds),
+        slices: std.ArrayList(Slice),
         /// Allocator for slices
         allocator: std.mem.Allocator,
 
@@ -26,7 +26,7 @@ pub fn SortedSequence(comptime T: type) type {
             }
 
             // Create initial slice covering entire array
-            var slices = std.ArrayList(SliceBounds).init(allocator);
+            var slices = std.ArrayList(Slice).init(allocator);
             try slices.append(.{
                 .start = 0,
                 .end = n - 1,
@@ -119,7 +119,7 @@ pub fn SortedSequence(comptime T: type) type {
                         _ = self.slices.orderedRemove(slice_to_split.?);
                         
                         // Collect all new slices we need to insert
-                        var new_slices = std.ArrayList(SliceBounds).init(self.allocator);
+                        var new_slices = std.ArrayList(Slice).init(self.allocator);
                         defer new_slices.deinit();
                         
                         // Add the split slices from the first split
@@ -360,7 +360,7 @@ pub fn SortedSequence(comptime T: type) type {
 }
 
 /// Finds the correct position for a value in a sorted array using binary search
-fn findCorrectPosition(comptime T: type, arr: []const T, value: T, start: usize, end: usize) usize {
+pub fn findCorrectPosition(comptime T: type, arr: []const T, value: T, start: usize, end: usize) usize {
     var left = start;
     var right = end;
     
@@ -381,7 +381,7 @@ fn findCorrectPosition(comptime T: type, arr: []const T, value: T, start: usize,
 }
 
 /// Finds the index of a value in a sorted array using binary search
-fn findIndex(comptime T: type, arr: []const T, value: T) ?usize {
+pub fn findIndex(comptime T: type, arr: []const T, value: T) ?usize {
     var left: usize = 0;
     var right: usize = arr.len;
     

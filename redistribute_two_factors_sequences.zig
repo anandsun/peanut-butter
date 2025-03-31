@@ -1,5 +1,4 @@
 const std = @import("std");
-const testing = std.testing;
 const fix = @import("sorted_sequence.zig");
 
 /// Returns true if n is a power of 2
@@ -88,7 +87,7 @@ test "redistribute two factors - N=15" {
     defer std.heap.page_allocator.free(result);
 
     const expected = [_]u64{ 4, 4, 4, 4, 5, 5, 6, 6, 6, 7, 7, 9, 11, 13, 15 };
-    try testing.expectEqualSlices(u64, &expected, result);
+    try std.testing.expectEqualSlices(u64, &expected, result);
 }
 
 test "redistribute two factors - N=33" {
@@ -96,7 +95,7 @@ test "redistribute two factors - N=33" {
     defer std.heap.page_allocator.free(result);
 
     const expected = [_]u64{ 7, 8, 8, 8, 8, 8, 8, 9, 9, 10, 10, 10, 11, 11, 12, 12, 12, 12, 13, 13, 14, 14, 15, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33 };
-    try testing.expectEqualSlices(u64, &expected, result);
+    try std.testing.expectEqualSlices(u64, &expected, result);
 } 
 
 test "redistribute two factors - N=65" {
@@ -104,5 +103,5 @@ test "redistribute two factors - N=65" {
     defer std.heap.page_allocator.free(result);
 
     const expected = [_]u64{ 13, 14, 14, 14, 14, 15, 15, 15, 16, 16, 16, 16, 16, 16, 16, 17, 17, 18, 18, 18, 19, 19, 20, 20, 20, 20, 21, 21, 22, 22, 22, 23, 23, 24, 24, 24, 24, 24, 25, 25, 26, 26, 27, 27, 29, 29, 31, 31, 33, 35, 37, 39, 41, 43, 45, 47, 49, 51, 53, 55, 57, 59, 61, 63, 65 };
-    try testing.expectEqualSlices(u64, &expected, result);
+    try std.testing.expectEqualSlices(u64, &expected, result);
 } 
