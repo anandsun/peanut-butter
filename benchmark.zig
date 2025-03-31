@@ -1,5 +1,5 @@
 const std = @import("std");
-const seq = @import("redistribute_two_factors_sequences.zig");
+const sequences = @import("redistribute_two_factors_sequences.zig");
 const arr = @import("redistribute_two_factors_array.zig");
 const hash = @import("redistribute_two_factors_hashmap.zig");
 
@@ -100,7 +100,7 @@ pub fn main() !void {
         results.deinit();
     }
     
-    try results.append(try benchmarkImplementation("sequence", seq.redistributeTwoFactors, &sizes, num_runs, timeout_ns, skip_threshold_ns));
+    try results.append(try benchmarkImplementation("sequence", sequences.redistributeTwoFactors, &sizes, num_runs, timeout_ns, skip_threshold_ns));
     try results.append(try benchmarkImplementation("array", arr.redistributeTwoFactors, &sizes, num_runs, timeout_ns, skip_threshold_ns));
     try results.append(try benchmarkImplementation("hashmap", hash.redistributeTwoFactors, &sizes, num_runs, timeout_ns, skip_threshold_ns));
     

@@ -1,5 +1,5 @@
 const std = @import("std");
-const fix = @import("sorted_sequence.zig");
+const fix = @import("sorted_runs_sequence.zig");
 
 /// Returns true if n is a power of 2
 fn isPowerOfTwo(n: u64) bool {
@@ -37,7 +37,7 @@ fn findIndex(comptime T: type, arr: []const T, value: T) ?usize {
 
 /// Processes even numbers in the array according to the specified rules
 pub fn redistributeTwoFactors(N: u64) ![]u64 {
-    var seq = try fix.SortedSequence(u64).init(std.heap.page_allocator, N);
+    var seq = try fix.SortedRunsSequence(u64).init(std.heap.page_allocator, N);
     defer seq.deinit();
 
     const lower_bound = 3 * N / 8;
